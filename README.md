@@ -1,6 +1,7 @@
 # 알라딘 서점 api를 통한 중고서적 트렌드 분석 및 정보 시각화
 
 ### 프로젝트 폴더 구조
+```
 project/
 ├── dags/
 ├── data/
@@ -10,6 +11,7 @@ project/
 ├── plugins/
 ├── scripts/
 └── docker-compose.yml
+```
 
 #### 폴더 상세 설명
 1. dags/ (DAG 스크립트 폴더)
