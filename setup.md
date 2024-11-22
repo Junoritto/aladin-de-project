@@ -1,5 +1,6 @@
 # Airflow 및 Docker 환경 세팅, S3 및 Snowflake 연결 가이드
 
+
 1. 해당 브랜치의 repo를 clone
 ```bash
 git clone --branch feature/airflow-docker-setup --single-branch https://github.com/Junoritto/aladin-de-project.git
@@ -19,14 +20,14 @@ docker-compose up
 
 6. https://localhost:8080 으로 웹 UI에 접속, 또는 Dag 테스트
 
-# S3 접속 가이드
+### S3 접속 가이드
 - s3 관련 오퍼레이터 작성 시 다음과 같이 파라미터 설정
 ```python
 aws_conn_id='AWS_CONN_ID',  # AWS 커넥션 ID
 bucket='de3-aladin-bucket' # 버킷 이름
 ```
 
-# 알라딘 API KEY 사용 가이드
+### 알라딘 API KEY 사용 가이드
 - .env 파일에 이미 내장되어 있으며 별도로 설정할 필요 없음
 
 ```python
