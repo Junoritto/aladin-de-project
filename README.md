@@ -1,6 +1,7 @@
 # 알라딘 서점 api를 통한 중고서적 트렌드 분석 및 정보 시각화
 
-### 프로젝트 폴더 구조
+### 📂 프로젝트 폴더 구조
+```python
 project/
 ├── dags/
 ├── data/
@@ -10,6 +11,7 @@ project/
 ├── plugins/
 ├── scripts/
 └── docker-compose.yml
+```
 
 #### 폴더 상세 설명
 1. dags/ (DAG 스크립트 폴더)
@@ -41,3 +43,4 @@ project/
 - 용도:
     - Airflow와 관련 구성 요소를 Docker로 실행하기 위한 설정
     - Airflow, 웹 서버, 스케줄러, 워커 등 모든 컨테이너를 한 번에 실행 가능
+ 
