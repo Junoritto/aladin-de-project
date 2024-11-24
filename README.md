@@ -10,7 +10,7 @@ project/
 ├── logs/
 ├── plugins/
 ├── scripts/
-└── docker-compose.yml
+└── docker-compose.yaml
 ```
 
 #### 폴더 상세 설명
@@ -39,7 +39,7 @@ project/
     - Airflow 외부에서 테스트하거나 독립적으로 실행 가능한 Python 스크립트 저장
     - 초기 개발 단계에서 DAG 없이 직접 실행하며 기능을 테스트할 때 사용
 
-6. docker-compose.yml (Docker Compose 설정 파일)
+6. docker-compose.yaml (Docker Compose 설정 파일)
 - 용도:
     - Airflow와 관련 구성 요소를 Docker로 실행하기 위한 설정
     - Airflow, 웹 서버, 스케줄러, 워커 등 모든 컨테이너를 한 번에 실행 가능
