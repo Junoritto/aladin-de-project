@@ -1,11 +1,16 @@
 import requests
 import json
 import os
+import boto3
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # 알라딘 API 키 설정
-TTBKey = "ttbdlwnsgh1071623001"
+TTBKey = os.getenv("AIRFLOW_API_KEY")
 BASE_URL = "http://www.aladin.co.kr/ttb/api/ItemList.aspx"
+BUCKET_NAME = "de3-aladin-bucket"  # S3 버킷 이름
 
 # 현재 파일 위치를 기준으로 경로 설정
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -42,6 +47,48 @@ def save_to_file(data, output_dir, filename):
         json.dump(data, f, ensure_ascii=False, indent=4)
     print(f"파일 저장 완료: {filepath}")
 
+def upload_to_s3(book_data):
+    """
+    수집된 데이터를 S3에 업로드.
+    """
+    aws_conn_env = os.getenv("AIRFLOW_CONN_AWS")
+    if not aws_conn_env:
+        raise ValueError("환경 변수 'AIRFLOW_CONN_AWS'가 설정되지 않았습니다.")
+    filename = f"all_books_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+    # local_path = os.path.join(RAW_DATA_DIR, filename)
+
+    # 데이터를 로컬 파일로 저장 (필요시 주석 해제)
+    # with open(local_path, "w", encoding="utf-8") as f:
+    #     json.dump(book_data, f, ensure_ascii=False, indent=4)
+
+
+    # AWS 연결 정보 파싱
+    try:
+        conn_info = aws_conn_env.split("//")[1]
+        print(conn_info)
+        aws_access_key, remaining = conn_info.split(":", 1)
+        print(aws_access_key, remaining)
+        aws_secret_key, extra = remaining.split("@", 1)
+        print(aws_secret_key, extra)
+        region_name = "us-west-2"  # 필요 시 수정 가능
+    except Exception as e:
+        raise ValueError(f"'AIRFLOW_CONN_AWS'의 포맷이 올바르지 않습니다: {aws_conn_env}") from e
+    
+    # S3 업로드 (필요시 활성화)
+    # s3 = boto3.client(
+    #     "s3",
+    #     aws_access_key_id=aws_access_key,
+    #     aws_secret_access_key=aws_secret_key,
+    #     region_name=region_name,
+    # )
+    # s3.put_object(
+    #     Bucket=BUCKET_NAME,
+    #     Key=filename,
+    #     Body=json.dumps(book_data, ensure_ascii=False),
+    # )
+    print(f"S3 업로드 완료: s3://{BUCKET_NAME}/{filename}")
+
+
 def main():
     all_books = []  # 모든 서적 데이터를 저장할 리스트
     start = 1       # 초기 start 값
@@ -70,8 +117,9 @@ def main():
         batch += 1
     
     # 전체 데이터 저장 (저장 필요한 경우에 주석 해제하고 사용)
-    # full_data_file = f"all_books_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
-    # save_to_file(all_books, OUTPUT_DIR, full_data_file)
+    full_data_file = f"all_books_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+    save_to_file(all_books, OUTPUT_DIR, full_data_file)
+    upload_to_s3(all_books)
 
 if __name__ == "__main__":
     main()

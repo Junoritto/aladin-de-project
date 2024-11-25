@@ -1,9 +1,12 @@
 from airflow.decorators import dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from datetime import datetime, timedelta
+from airflow.models import Variable
 import requests
 import os
+import boto3
 import json
+
 
 # 기본 설정
 default_args = {
@@ -16,10 +19,11 @@ default_args = {
 }
 
 # 알라딘 API 설정
-TTBKey = "ttbdlwnsgh1071623001"
+TTBKey = Variable.get("TTBKey")
 BASE_URL = "http://www.aladin.co.kr/ttb/api/ItemList.aspx"
 RAW_DATA_DIR = "../data/raw"
-S3_BUCKET = "your-s3-bucket-name"  # S3 버킷 이름
+BUCKET_NAME = "de3-aladin-bucket"  # S3 버킷 이름
+S3_KEY_PREFIX = "new/"          # S3 저장 경로
 
 @dag(
     dag_id="getItemNewSpecial_dag",
@@ -56,11 +60,11 @@ def extract():
             books = response.json()["item"]
             all_books.extend(books)
 
-            # 배치별 JSON 저장
-            filename = f"books_batch_{batch}_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
-            with open(os.path.join(RAW_DATA_DIR, filename), "w", encoding="utf-8") as f:
-                json.dump(books, f, ensure_ascii=False, indent=4)
-            print(f"로컬에 저장 완료: {filename}")
+            # 배치별 JSON 저장 (필요시 주석 해제)
+            # filename = f"books_batch_{batch}_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+            # with open(os.path.join(RAW_DATA_DIR, filename), "w", encoding="utf-8") as f:
+            #     json.dump(books, f, ensure_ascii=False, indent=4)
+            # print(f"로컬에 저장 완료: {filename}")
 
         return all_books  # 전체 데이터를 다음 Task로 전달
 
@@ -69,26 +73,28 @@ def extract():
         """
         수집된 데이터를 S3에 업로드.
         """
-        hook = S3Hook(aws_conn_id="aws_default")
-        filename = f"all_books_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
-        local_path = os.path.join(RAW_DATA_DIR, filename)
+        # Airflow Connection ID 설정
+        aws_conn_id = "aws_default"
 
-        # 데이터를 로컬 파일로 저장
-        with open(local_path, "w", encoding="utf-8") as f:
-            json.dump(book_data, f, ensure_ascii=False, indent=4)
+        # S3 Hook 인스턴스 생성
+        hook = S3Hook(aws_conn_id=aws_conn_id)
+        
+        # 파일 이름 설정
+        filename = f"all_books_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
 
         # S3 업로드
-        s3_key = f"raw/{filename}"
-        hook.load_file(
-            filename=local_path,
-            key=s3_key,
-            bucket_name=S3_BUCKET,
-            replace=True,
+        hook.load_string(
+            string_data=json.dumps(book_data, ensure_ascii=False),  # 데이터를 JSON으로 직렬화
+            key=f"new/{filename}",  # S3 내 경로
+            bucket_name="de3-aladin-bucket",  # S3 버킷 이름
+            replace=True  # 기존 파일 덮어쓰기
         )
-        print(f"S3 업로드 완료: s3://{S3_BUCKET}/{s3_key}")
+
+        print(f"S3 업로드 완료: s3://de3-aladin-bucket/new/{filename}")
 
     # Task 연결
     books = fetch_books(TTBKey)  # 데이터를 API에서 가져옴
-    # upload_to_s3(books)          # S3로 업로드 (향후 활성화)
+    print("checkpoint 0")
+    upload_to_s3(books)          # S3로 업로드
 
 extract()
