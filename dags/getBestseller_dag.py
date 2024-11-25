@@ -67,7 +67,7 @@ def save_to_s3(data, **kwargs):
         aws_secret_access_key=aws_secret_key,
         region_name=region_name,
     )
-    file_name = f"{S3_KEY_PREFIX}bestseller_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+    file_name = f"{S3_KEY_PREFIX}bestseller.json" # 파일명 고정
     s3.put_object(
         Bucket=BUCKET_NAME,
         Key=file_name,
