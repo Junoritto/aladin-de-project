@@ -8,7 +8,7 @@ import json
 
 # 환경 변수에서 API 키와 AWS S3 정보 가져오기
 API_KEY = os.getenv("AIRFLOW_VAR_API_KEY")
-BUCKET_NAME = "aladin-api-data-bucket" # 버킷 이름 수정
+BUCKET_NAME = "de3-aladin-bucket" # 버킷 이름 수정
 S3_KEY_PREFIX = "bestsellers/"
 
 
