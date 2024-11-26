@@ -91,6 +91,27 @@ def pipeline():
 
         print(f"변환된 데이터 개수: {len(transformed_books)}")
         return transformed_books
+    
+    @task
+    def process_category(book_data):
+        """
+        categoryName에서 두 번째 부분만 추출
+        """
+        processed_books = []
+
+        for book in book_data:
+            # CATEGORYNAME 컬럼에서 '>'로 나누고 두 번째 부분만 추출
+            category_full = book.get("categoryName", "")
+            category_parts = category_full.split(">")
+            if len(category_parts) > 1:
+                book["categoryName"] = category_parts[1].strip()  # 두 번째 부분으로 대체
+            else:
+                book["categoryName"] = "Unknown"  # 데이터가 없을 경우 기본값 설정
+
+            processed_books.append(book)
+
+        print(f"카테고리 전처리 완료된 데이터 개수: {len(processed_books)}")
+        return processed_books
 
     @task
     def upload_to_s3(book_data):
@@ -178,7 +199,8 @@ def pipeline():
     # Task 연결
     books = fetch_books(TTBKey)  # 데이터를 API에서 가져옴
     transformed_books = transform_books(books)  # 데이터를 변환
-    s3_key = upload_to_s3(transformed_books)  # 변환된 데이터를 S3로 업로드
+    processed_books = process_category(transformed_books)
+    s3_key = upload_to_s3(processed_books)  # 변환된 데이터를 S3로 업로드
     load_to_snowflake(s3_key)  # 변환된 데이터를 Snowflake에 적재
 
 pipeline()
