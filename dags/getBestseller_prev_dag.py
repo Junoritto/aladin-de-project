@@ -9,11 +9,10 @@ from snowflake.connector import connect
 from urllib.parse import urlparse, parse_qs
 import html
 
-
-# 환경 변수에서 API 키와 Snowflake 연결 정보 가져오기
+# 환경 변수에서 API 키와 AWS S3 정보 가져오기
 API_KEY = os.getenv("AIRFLOW_VAR_API_KEY")
-BUCKET_NAME = "de3-aladin-bucket"  # S3 버킷 이름
-S3_KEY_PREFIX = "bestsellers/"  # S3 키 경로
+BUCKET_NAME = "de3-aladin-bucket"  # 버킷 이름 수정
+S3_KEY_PREFIX = "bestsellers/"
 SNOWFLAKE_CONN_STR = os.getenv("AIRFLOW_CONN_SNOWFLAKE_CONN_ID", "").strip()
 
 def parse_snowflake_connection(uri):
@@ -50,16 +49,23 @@ def parse_snowflake_connection(uri):
         "warehouse": warehouse,
     }
 
-def fetch_bestseller_data():
+def fetch_previous_bestseller_data():
     """
-    Fetch bestseller data from Aladin API.
+    Fetch previous week's bestseller data from Aladin API.
     """
     all_data = []
     max_results = 50  # API에서 한 번에 가져올 최대 데이터 수
     total_pages = 20  # API 매뉴얼에 따라 가져올 페이지 수
 
+    # 지난주 날짜 계산
+    today = datetime.today()
+    last_week = today - timedelta(weeks=1)
+    year = last_week.year
+    month = last_week.month
+    week = (last_week.day - 1) // 7 + 1  # 해당 월의 몇 번째 주인지 계산
+
     for page in range(1, total_pages + 1):
-        # API 호출 파라미터 설정
+        # API 호출 파라미터 설정 (Year, Month, Week 추가)
         params = {
             "ttbkey": API_KEY,
             "QueryType": "Bestseller",
@@ -68,6 +74,9 @@ def fetch_bestseller_data():
             "start": page,
             "Output": "JS",
             "Version": "20131101",
+            "Year": year,
+            "Month": month,
+            "Week": week,
         }
         response = requests.get("http://www.aladin.co.kr/ttb/api/ItemList.aspx", params=params)
         response.raise_for_status()
@@ -114,9 +123,7 @@ def fetch_bestseller_data():
     return all_data
 
 
-
-
-def save_to_s3(data, **kwargs):
+def save_to_s3_prev(data, **kwargs):
     """Save fetched data to AWS S3 in a valid JSON format."""
     aws_conn_env = os.getenv("AIRFLOW_CONN_AWS_CONN_ID")
     if not aws_conn_env:
@@ -147,7 +154,7 @@ def save_to_s3(data, **kwargs):
     else:
         raise ValueError("데이터가 잘못된 형식입니다. JSON 배열 또는 문자열이어야 합니다.")
 
-    file_name = f"{S3_KEY_PREFIX}bestseller.json"
+    file_name = f"{S3_KEY_PREFIX}bestseller_prev.json"
 
     # S3에 데이터 저장
     s3.put_object(
@@ -156,9 +163,6 @@ def save_to_s3(data, **kwargs):
         Body=transformed_data,
     )
     print(f"Data saved to S3 bucket {BUCKET_NAME}/{file_name}")
-
-
-
 
 
 def load_to_snowflake(s3_key, **kwargs):
@@ -188,12 +192,12 @@ def load_to_snowflake(s3_key, **kwargs):
     cursor.execute(f"USE DATABASE {connection_params['database']};")
     cursor.execute(f"USE SCHEMA {connection_params['schema']};")
 
-    truncate_sql = "TRUNCATE TABLE RAW_DATA.BESTSELLER;"
+    truncate_sql = "TRUNCATE TABLE RAW_DATA.BESTSELLER_PREV;"
     cursor.execute(truncate_sql)
-    print("Table RAW_DATA.BESTSELLER truncated.")
+    print("Table RAW_DATA.BESTSELLER_PREV truncated.")
 
     copy_sql = f"""
-    COPY INTO RAW_DATA.BESTSELLER
+    COPY INTO RAW_DATA.BESTSELLER_PREV
     FROM 's3://{BUCKET_NAME}/{s3_key}'
     CREDENTIALS = (AWS_KEY_ID='{aws_access_key}' AWS_SECRET_KEY='{aws_secret_key}')
     FILE_FORMAT = (TYPE = 'JSON' STRIP_OUTER_ARRAY = TRUE)
@@ -203,46 +207,43 @@ def load_to_snowflake(s3_key, **kwargs):
     try:
         cursor.execute(copy_sql)
         conn.commit()
-        print("Data loaded into Snowflake table RAW_DATA.BESTSELLER.")
+        print("Data loaded into Snowflake table RAW_DATA.BESTSELLER_PREV.")
     except Exception as e:
         print(f"Error during COPY INTO: {e}")
     finally:
         cursor.close()
         conn.close()
 
-
-
-
 # Airflow DAG 정의
 with DAG(
-    dag_id="aladin_bestseller_pipeline",
+    dag_id="aladin_prev_bestseller_pipeline",
     default_args={
         "owner": "airflow",
         "depends_on_past": False,
         "retries": 1,
         "retry_delay": timedelta(minutes=5),
     },
-    description="Fetch Aladin bestseller data, save to S3, and load into Snowflake",
+    description="Fetch Aladin previous week's bestseller data and save to S3",
     schedule_interval="@daily",
     start_date=datetime(2023, 11, 26),
     catchup=False,
 ) as dag:
 
-    fetch_task = PythonOperator(
-        task_id="fetch_bestseller_data",
-        python_callable=fetch_bestseller_data,
+    fetch_prev_task = PythonOperator(
+        task_id="fetch_previous_bestseller_data",
+        python_callable=fetch_previous_bestseller_data,
     )
 
-    save_task = PythonOperator(
-        task_id="save_to_s3",
-        python_callable=save_to_s3,
-        op_args=["{{ ti.xcom_pull(task_ids='fetch_bestseller_data') }}"],  # XCom으로 데이터 전달
+    save_prev_task = PythonOperator(
+        task_id="save_to_s3_prev",
+        python_callable=save_to_s3_prev,
+        op_args=["{{ ti.xcom_pull(task_ids='fetch_previous_bestseller_data') }}"],
     )
 
-    load_task = PythonOperator(
+    load_prev_task = PythonOperator(
         task_id="load_to_snowflake",
         python_callable=load_to_snowflake,
-        op_args=["bestsellers/bestseller.json"],  # S3 파일 키 전달
+        op_args=["bestsellers/bestseller_prev.json"],  # S3 파일 키 전달
     )
 
-    fetch_task >> save_task >> load_task
+    fetch_prev_task >> save_prev_task >> load_prev_task
